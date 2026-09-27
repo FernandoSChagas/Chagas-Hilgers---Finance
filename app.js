@@ -1,10 +1,17 @@
 /* =========================================================
    BANCO CHAGAS&HILGERS
-   MOTOR DA SIMULAÇÃO — VERSÃO COMPARTILHADA
-   Firebase Realtime Database
+   MOTOR DA SIMULAÇÃO — VERSÃO COMPARTILHADA E PROTEGIDA
+   Firebase Authentication + Realtime Database
 ========================================================= */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+
+import {
+    getAuth,
+    signInWithEmailAndPassword,
+    onAuthStateChanged,
+    signOut
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 
 import {
     getDatabase,
@@ -15,7 +22,7 @@ import {
 
 
 /* =========================================================
-   CONFIGURAÇÃO DO FINANCIAMENTO
+   CONFIGURAÇÃO DA SIMULAÇÃO
 ========================================================= */
 
 const INITIAL_TARGET = 300000;
@@ -53,22 +60,31 @@ const firebaseConfig = {
 
 
 /* =========================================================
-   INICIALIZAR FIREBASE
+   INICIALIZAÇÃO FIREBASE
 ========================================================= */
 
 const app =
     initializeApp(firebaseConfig);
 
+const auth =
+    getAuth(app);
 
 const database =
     getDatabase(app);
-
 
 const simulationRef =
     ref(database, "simulation");
 
 
+/* =========================================================
+   ESTADO
+========================================================= */
+
+let state = createInitialState();
+
 let firebaseLoaded = false;
+
+let databaseListenerStarted = false;
 
 
 /* =========================================================
@@ -98,7 +114,7 @@ function createInitialState() {
 
 
 /* =========================================================
-   ESTADO LOCAL — MIGRAÇÃO INICIAL
+   LOCAL STORAGE — MIGRAÇÃO
 ========================================================= */
 
 function loadLocalState() {
@@ -108,25 +124,27 @@ function loadLocalState() {
             STORAGE_KEY
         );
 
-
     if (!saved) {
-
         return null;
-
     }
-
 
     try {
 
         const parsed =
             JSON.parse(saved);
 
-
         return {
 
             ...createInitialState(),
 
-            ...parsed
+            ...parsed,
+
+            transactions:
+                Array.isArray(
+                    parsed.transactions
+                )
+                    ? parsed.transactions
+                    : []
 
         };
 
@@ -145,14 +163,6 @@ function loadLocalState() {
 
 
 /* =========================================================
-   ESTADO ATUAL
-========================================================= */
-
-let state =
-    createInitialState();
-
-
-/* =========================================================
    SALVAR NO FIREBASE
 ========================================================= */
 
@@ -160,14 +170,13 @@ async function saveState() {
 
     if (!firebaseLoaded) {
 
-        console.warn(
-            "Firebase ainda não foi carregado."
+        alert(
+            "A simulação ainda está carregando. Aguarde alguns segundos."
         );
 
-        return;
+        return false;
 
     }
-
 
     try {
 
@@ -176,10 +185,11 @@ async function saveState() {
             state
         );
 
-
         console.log(
             "Simulação salva no Firebase."
         );
+
+        return true;
 
     } catch (error) {
 
@@ -189,8 +199,10 @@ async function saveState() {
         );
 
         alert(
-            "Não foi possível salvar a movimentação. Verifique a conexão."
+            "Não foi possível salvar a movimentação."
         );
+
+        return false;
 
     }
 
@@ -231,7 +243,6 @@ function formatDate(dateString) {
     const parts =
         dateString.split("-");
 
-
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
 
 }
@@ -245,7 +256,6 @@ function getToday() {
 
     const date =
         new Date();
-
 
     return [
 
@@ -278,7 +288,6 @@ function addMonths(
             .split("-")
             .map(Number);
 
-
     const date =
         new Date(
             year,
@@ -286,11 +295,9 @@ function addMonths(
             day
         );
 
-
     date.setMonth(
         date.getMonth() + months
     );
-
 
     return [
 
@@ -372,7 +379,6 @@ function calculateRemainingTerm() {
             state.anticipatedMonths || 0
         );
 
-
     return Math.max(
         0,
         BASE_TERM - savedMonths
@@ -397,24 +403,18 @@ async function registerMonthlyPayment() {
 
     }
 
-
     const paymentDate =
         state.nextPaymentDate;
-
 
     const installmentNumber =
         state.nextInstallmentNumber;
 
-
     state.capital +=
         MONTHLY_PAYMENT;
 
-
     state.paidInstallments++;
 
-
     state.nextInstallmentNumber++;
-
 
     state.transactions.unshift({
 
@@ -432,16 +432,13 @@ async function registerMonthlyPayment() {
 
     });
 
-
     state.nextPaymentDate =
         addMonths(
             paymentDate,
             1
         );
 
-
     updateDashboard();
-
 
     await saveState();
 
@@ -464,18 +461,15 @@ async function registerExtraContribution() {
 
     }
 
-
     const input =
         document.getElementById(
             "extraAmount"
         );
 
-
     const amount =
         Number(
             input.value
         );
-
 
     if (
         !Number.isFinite(amount) ||
@@ -490,10 +484,8 @@ async function registerExtraContribution() {
 
     }
 
-
     state.capital +=
         amount;
-
 
     state.transactions.unshift({
 
@@ -511,12 +503,9 @@ async function registerExtraContribution() {
 
     });
 
-
     input.value = "";
 
-
     updateDashboard();
-
 
     await saveState();
 
@@ -539,18 +528,15 @@ async function anticipateInstallments() {
 
     }
 
-
     const input =
         document.getElementById(
             "anticipationAmount"
         );
 
-
     const quantity =
         Number(
             input.value
         );
-
 
     if (
         !Number.isInteger(quantity) ||
@@ -565,33 +551,26 @@ async function anticipateInstallments() {
 
     }
 
-
     const total =
         quantity *
         MONTHLY_PAYMENT;
 
-
     const firstInstallment =
         state.nextInstallmentNumber;
 
-
     const firstDate =
         state.nextPaymentDate;
-
 
     const lastInstallment =
         firstInstallment +
         quantity -
         1;
 
-
     state.capital +=
         total;
 
-
     state.anticipatedMonths +=
         quantity;
-
 
     state.nextPaymentDate =
         addMonths(
@@ -599,10 +578,8 @@ async function anticipateInstallments() {
             quantity
         );
 
-
     state.nextInstallmentNumber +=
         quantity;
-
 
     state.transactions.unshift({
 
@@ -620,12 +597,9 @@ async function anticipateInstallments() {
 
     });
 
-
     input.value = "";
 
-
     updateDashboard();
-
 
     await saveState();
 
@@ -642,7 +616,6 @@ function openResetModal() {
         document.getElementById(
             "resetModal"
         );
-
 
     if (modal) {
 
@@ -665,7 +638,6 @@ function closeResetModal() {
         document.getElementById(
             "resetModal"
         );
-
 
     if (modal) {
 
@@ -690,16 +662,12 @@ async function confirmReset() {
 
     }
 
-
     state =
         createInitialState();
 
-
     closeResetModal();
 
-
     updateDashboard();
-
 
     await saveState();
 
@@ -717,9 +685,7 @@ function renderTransactions() {
             "transactionList"
         );
 
-
     if (!list) return;
-
 
     if (
         !state.transactions.length
@@ -749,7 +715,6 @@ function renderTransactions() {
 
     }
 
-
     list.innerHTML =
         state.transactions
             .map(
@@ -777,15 +742,11 @@ function renderTransactions() {
 
                     </div>
 
-
                     <div class="transaction-info">
 
                         <div class="transaction-type">
-
                             ${transaction.type}
-
                         </div>
-
 
                         <div class="transaction-date">
 
@@ -802,7 +763,6 @@ function renderTransactions() {
                         </div>
 
                     </div>
-
 
                     <div class="transaction-amount">
 
@@ -830,13 +790,11 @@ function updateDashboard() {
     const total =
         getTotalCapital();
 
-
     const remaining =
         Math.max(
             0,
             INITIAL_TARGET - total
         );
-
 
     const progress =
         Math.min(
@@ -855,7 +813,6 @@ function updateDashboard() {
             "financedAmount"
         );
 
-
     if (financedAmount) {
 
         financedAmount.textContent =
@@ -873,7 +830,6 @@ function updateDashboard() {
             "paidAmount"
         );
 
-
     if (paidAmount) {
 
         paidAmount.textContent =
@@ -888,7 +844,6 @@ function updateDashboard() {
         document.getElementById(
             "remainingAmount"
         );
-
 
     if (remainingAmount) {
 
@@ -905,7 +860,6 @@ function updateDashboard() {
             "progressPercent"
         );
 
-
     if (progressPercent) {
 
         progressPercent.textContent =
@@ -918,7 +872,6 @@ function updateDashboard() {
         document.getElementById(
             "progressFill"
         );
-
 
     if (progressFill) {
 
@@ -934,7 +887,6 @@ function updateDashboard() {
         document.getElementById(
             "remainingTerm"
         );
-
 
     if (remainingTerm) {
 
@@ -953,7 +905,6 @@ function updateDashboard() {
             "anticipatedMonths"
         );
 
-
     if (anticipatedMonths) {
 
         anticipatedMonths.textContent =
@@ -971,7 +922,6 @@ function updateDashboard() {
             "paidInstallments"
         );
 
-
     if (paidInstallments) {
 
         paidInstallments.textContent =
@@ -986,7 +936,6 @@ function updateDashboard() {
         document.getElementById(
             "nextInstallment"
         );
-
 
     if (nextInstallment) {
 
@@ -1005,7 +954,6 @@ function updateDashboard() {
             "summaryFinanced"
         );
 
-
     if (summaryFinanced) {
 
         summaryFinanced.textContent =
@@ -1021,7 +969,6 @@ function updateDashboard() {
             "summaryPaid"
         );
 
-
     if (summaryPaid) {
 
         summaryPaid.textContent =
@@ -1035,7 +982,6 @@ function updateDashboard() {
             "summaryRemaining"
         );
 
-
     if (summaryRemaining) {
 
         summaryRemaining.textContent =
@@ -1047,6 +993,782 @@ function updateDashboard() {
     /* HISTÓRICO */
 
     renderTransactions();
+
+}
+
+
+/* =========================================================
+   TELA DE LOGIN
+========================================================= */
+
+function createLoginScreen() {
+
+    if (
+        document.getElementById(
+            "chLoginScreen"
+        )
+    ) {
+
+        return;
+
+    }
+
+
+    const screen =
+        document.createElement(
+            "div"
+        );
+
+
+    screen.id =
+        "chLoginScreen";
+
+
+    screen.innerHTML = `
+
+        <div class="ch-login-box">
+
+            <div class="ch-login-logo">
+
+                <img
+                    src="logo.png"
+                    alt="Chagas&Hilgers"
+                >
+
+            </div>
+
+
+            <div class="ch-login-brand">
+
+                <strong>
+                    Chagas&Hilgers
+                </strong>
+
+                <span>
+                    Financiamento do Apto
+                </span>
+
+            </div>
+
+
+            <div class="ch-login-title">
+                Acesso privado
+            </div>
+
+
+            <div class="ch-login-subtitle">
+                Entre para acessar a simulação compartilhada.
+            </div>
+
+
+            <form id="chLoginForm">
+
+                <label>
+                    E-mail
+                </label>
+
+                <input
+                    id="chLoginEmail"
+                    type="email"
+                    autocomplete="username"
+                    placeholder="seu e-mail"
+                    required
+                >
+
+
+                <label>
+                    Senha
+                </label>
+
+                <input
+                    id="chLoginPassword"
+                    type="password"
+                    autocomplete="current-password"
+                    placeholder="sua senha"
+                    required
+                >
+
+
+                <div
+                    id="chLoginError"
+                    class="ch-login-error"
+                ></div>
+
+
+                <button
+                    type="submit"
+                    id="chLoginButton"
+                >
+                    Entrar
+                </button>
+
+            </form>
+
+
+            <div class="ch-login-footer">
+                Acesso protegido por Firebase
+            </div>
+
+        </div>
+
+    `;
+
+
+    document.body.appendChild(
+        screen
+    );
+
+
+    const form =
+        document.getElementById(
+            "chLoginForm"
+        );
+
+
+    form.addEventListener(
+        "submit",
+        handleLogin
+    );
+
+
+    addLoginStyles();
+
+}
+
+
+/* =========================================================
+   ESTILO DA TELA DE LOGIN
+========================================================= */
+
+function addLoginStyles() {
+
+    if (
+        document.getElementById(
+            "chLoginStyles"
+        )
+    ) {
+
+        return;
+
+    }
+
+
+    const style =
+        document.createElement(
+            "style"
+        );
+
+
+    style.id =
+        "chLoginStyles";
+
+
+    style.textContent = `
+
+        #chLoginScreen {
+
+            position: fixed;
+
+            inset: 0;
+
+            z-index: 999999;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            padding: 24px;
+
+            background:
+                #071525;
+
+            font-family:
+                "DM Sans",
+                sans-serif;
+
+        }
+
+
+        .ch-login-box {
+
+            width: 100%;
+
+            max-width: 390px;
+
+            padding: 34px 28px;
+
+            border-radius: 24px;
+
+            background: #ffffff;
+
+            box-shadow:
+                0 25px 80px
+                rgba(0,0,0,.35);
+
+        }
+
+
+        .ch-login-logo {
+
+            display: flex;
+
+            justify-content: center;
+
+            margin-bottom: 16px;
+
+        }
+
+
+        .ch-login-logo img {
+
+            width: 64px;
+
+            height: 64px;
+
+            object-fit: contain;
+
+            border-radius: 16px;
+
+        }
+
+
+        .ch-login-brand {
+
+            display: flex;
+
+            flex-direction: column;
+
+            align-items: center;
+
+            margin-bottom: 30px;
+
+        }
+
+
+        .ch-login-brand strong {
+
+            font-family:
+                "Playfair Display",
+                serif;
+
+            font-size: 22px;
+
+            color: #071525;
+
+        }
+
+
+        .ch-login-brand span {
+
+            margin-top: 3px;
+
+            font-size: 11px;
+
+            color: #7a8491;
+
+        }
+
+
+        .ch-login-title {
+
+            font-size: 20px;
+
+            font-weight: 700;
+
+            color: #071525;
+
+            margin-bottom: 7px;
+
+        }
+
+
+        .ch-login-subtitle {
+
+            font-size: 12px;
+
+            line-height: 1.5;
+
+            color: #7a8491;
+
+            margin-bottom: 22px;
+
+        }
+
+
+        #chLoginForm {
+
+            display: flex;
+
+            flex-direction: column;
+
+        }
+
+
+        #chLoginForm label {
+
+            font-size: 11px;
+
+            font-weight: 600;
+
+            color: #34404d;
+
+            margin-bottom: 7px;
+
+        }
+
+
+        #chLoginForm input {
+
+            width: 100%;
+
+            box-sizing: border-box;
+
+            height: 46px;
+
+            padding: 0 14px;
+
+            margin-bottom: 16px;
+
+            border: 1px solid #dce1e7;
+
+            border-radius: 12px;
+
+            outline: none;
+
+            background: #f8f9fb;
+
+            color: #071525;
+
+            font-family:
+                "DM Sans",
+                sans-serif;
+
+            font-size: 13px;
+
+        }
+
+
+        #chLoginForm input:focus {
+
+            border-color: #071525;
+
+            background: #ffffff;
+
+        }
+
+
+        #chLoginButton {
+
+            width: 100%;
+
+            height: 48px;
+
+            margin-top: 4px;
+
+            border: 0;
+
+            border-radius: 12px;
+
+            background: #071525;
+
+            color: #ffffff;
+
+            font-family:
+                "DM Sans",
+                sans-serif;
+
+            font-size: 13px;
+
+            font-weight: 700;
+
+            cursor: pointer;
+
+        }
+
+
+        #chLoginButton:disabled {
+
+            opacity: .6;
+
+            cursor: default;
+
+        }
+
+
+        .ch-login-error {
+
+            display: none;
+
+            margin: -4px 0 14px;
+
+            padding: 10px 12px;
+
+            border-radius: 10px;
+
+            background: #fff1f1;
+
+            color: #a33a3a;
+
+            font-size: 11px;
+
+            line-height: 1.4;
+
+        }
+
+
+        .ch-login-footer {
+
+            margin-top: 22px;
+
+            text-align: center;
+
+            font-size: 9px;
+
+            color: #a0a8b1;
+
+        }
+
+
+        @media (max-width: 520px) {
+
+            .ch-login-box {
+
+                padding: 30px 22px;
+
+                border-radius: 21px;
+
+            }
+
+        }
+
+    `;
+
+
+    document.head.appendChild(
+        style
+    );
+
+}
+
+
+/* =========================================================
+   LOGIN
+========================================================= */
+
+async function handleLogin(event) {
+
+    event.preventDefault();
+
+
+    const emailInput =
+        document.getElementById(
+            "chLoginEmail"
+        );
+
+
+    const passwordInput =
+        document.getElementById(
+            "chLoginPassword"
+        );
+
+
+    const button =
+        document.getElementById(
+            "chLoginButton"
+        );
+
+
+    const errorBox =
+        document.getElementById(
+            "chLoginError"
+        );
+
+
+    const email =
+        emailInput.value.trim();
+
+
+    const password =
+        passwordInput.value;
+
+
+    errorBox.style.display =
+        "none";
+
+
+    button.disabled =
+        true;
+
+
+    button.textContent =
+        "Entrando...";
+
+
+    try {
+
+        await signInWithEmailAndPassword(
+            auth,
+            email,
+            password
+        );
+
+
+        console.log(
+            "Login realizado com sucesso."
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "Erro de login:",
+            error
+        );
+
+
+        let message =
+            "Não foi possível entrar. Verifique o e-mail e a senha.";
+
+
+        if (
+            error.code ===
+            "auth/invalid-credential"
+        ) {
+
+            message =
+                "E-mail ou senha incorretos.";
+
+        }
+
+
+        if (
+            error.code ===
+            "auth/invalid-email"
+        ) {
+
+            message =
+                "Digite um e-mail válido.";
+
+        }
+
+
+        if (
+            error.code ===
+            "auth/too-many-requests"
+        ) {
+
+            message =
+                "Muitas tentativas. Aguarde um pouco e tente novamente.";
+
+        }
+
+
+        errorBox.textContent =
+            message;
+
+
+        errorBox.style.display =
+            "block";
+
+
+        button.disabled =
+            false;
+
+
+        button.textContent =
+            "Entrar";
+
+    }
+
+}
+
+
+/* =========================================================
+   ESCONDER / MOSTRAR LOGIN
+========================================================= */
+
+function hideLoginScreen() {
+
+    const screen =
+        document.getElementById(
+            "chLoginScreen"
+        );
+
+
+    if (screen) {
+
+        screen.remove();
+
+    }
+
+}
+
+
+function showLoginScreen() {
+
+    createLoginScreen();
+
+}
+
+
+/* =========================================================
+   INICIALIZAR BANCO DE DADOS
+========================================================= */
+
+async function startDatabaseListener() {
+
+    if (databaseListenerStarted) {
+
+        return;
+
+    }
+
+
+    databaseListenerStarted =
+        true;
+
+
+    onValue(
+        simulationRef,
+        async (snapshot) => {
+
+            try {
+
+                if (snapshot.exists()) {
+
+                    const firebaseState =
+                        snapshot.val();
+
+
+                    state = {
+
+                        ...createInitialState(),
+
+                        ...firebaseState,
+
+                        transactions:
+                            Array.isArray(
+                                firebaseState.transactions
+                            )
+                                ? firebaseState.transactions
+                                : []
+
+                    };
+
+
+                    firebaseLoaded =
+                        true;
+
+
+                    updateDashboard();
+
+
+                    console.log(
+                        "Simulação carregada do Firebase."
+                    );
+
+
+                    return;
+
+                }
+
+
+                /*
+                 * Firebase vazio.
+                 *
+                 * Tenta migrar os dados que estavam
+                 * anteriormente no localStorage.
+                 */
+
+                const localState =
+                    loadLocalState();
+
+
+                if (localState) {
+
+                    state =
+                        localState;
+
+                } else {
+
+                    state =
+                        createInitialState();
+
+                }
+
+
+                firebaseLoaded =
+                    true;
+
+
+                updateDashboard();
+
+
+                await set(
+                    simulationRef,
+                    state
+                );
+
+
+                console.log(
+                    "Simulação inicial criada no Firebase."
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    "Erro ao sincronizar Firebase:",
+                    error
+                );
+
+
+                firebaseLoaded =
+                    false;
+
+            }
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   LOGOUT
+========================================================= */
+
+async function logout() {
+
+    try {
+
+        await signOut(
+            auth
+        );
+
+        firebaseLoaded =
+            false;
+
+        databaseListenerStarted =
+            false;
+
+        state =
+            createInitialState();
+
+        updateDashboard();
+
+        showLoginScreen();
+
+    } catch (error) {
+
+        console.error(
+            "Erro ao sair:",
+            error
+        );
+
+    }
 
 }
 
@@ -1073,120 +1795,42 @@ window.closeResetModal =
 window.confirmReset =
     confirmReset;
 
+window.logout =
+    logout;
+
 
 /* =========================================================
-   CONEXÃO COM FIREBASE
+   AUTENTICAÇÃO
 ========================================================= */
 
-onValue(
-    simulationRef,
-    async (snapshot) => {
+onAuthStateChanged(
+    auth,
+    async (user) => {
 
-        try {
-
-            if (snapshot.exists()) {
-
-                /*
-                 * Já existe uma simulação no Firebase.
-                 * Ela passa a ser a fonte oficial dos dados.
-                 */
-
-                const firebaseState =
-                    snapshot.val();
-
-
-                state = {
-
-                    ...createInitialState(),
-
-                    ...firebaseState,
-
-                    transactions:
-                        Array.isArray(
-                            firebaseState.transactions
-                        )
-                            ? firebaseState.transactions
-                            : []
-
-                };
-
-
-                firebaseLoaded = true;
-
-
-                updateDashboard();
-
-
-                console.log(
-                    "Simulação carregada do Firebase."
-                );
-
-
-                return;
-
-            }
-
-
-            /*
-             * O Firebase ainda está vazio.
-             *
-             * Vamos verificar se este navegador
-             * possui a simulação antiga no localStorage.
-             *
-             * Isso permite migrar os dados existentes
-             * para o Firebase na primeira utilização.
-             */
-
-            const localState =
-                loadLocalState();
-
-
-            if (localState) {
-
-                state =
-                    localState;
-
-            } else {
-
-                state =
-                    createInitialState();
-
-            }
-
-
-            firebaseLoaded = true;
-
-
-            updateDashboard();
-
-
-            await set(
-                simulationRef,
-                state
-            );
-
+        if (user) {
 
             console.log(
-                "Simulação inicial criada no Firebase."
+                "Usuário autenticado:",
+                user.uid
             );
 
 
-        } catch (error) {
-
-            console.error(
-                "Erro ao sincronizar com Firebase:",
-                error
-            );
+            hideLoginScreen();
 
 
-            firebaseLoaded = false;
+            await startDatabaseListener();
 
 
-            alert(
-                "Não foi possível conectar à simulação compartilhada."
-            );
+            return;
 
         }
+
+
+        firebaseLoaded =
+            false;
+
+
+        showLoginScreen();
 
     }
 );
