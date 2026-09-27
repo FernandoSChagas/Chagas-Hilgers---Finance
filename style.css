@@ -1079,4 +1079,27 @@ input:focus-visible {
     .footer {
         width: min(100% - 24px, 980px);
     }
+
+    /* =========================
+   AJUSTE FINAL — MOBILE
+========================= */
+
+@media (max-width: 520px) {
+
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+    }
+
+    .app-shell {
+        min-height: 100vh;
+        margin: 0;
+        padding: 0;
+    }
+
+    .footer {
+        margin-bottom: 0;
+    }
 }
