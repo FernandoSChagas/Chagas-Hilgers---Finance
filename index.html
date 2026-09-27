@@ -19,33 +19,18 @@
     <!-- COR DA INTERFACE DO NAVEGADOR -->
     <meta name="theme-color" content="#071525">
 
+    <!-- FONTES -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600&display=swap"
+        rel="stylesheet"
+    >
 
+    <!-- CSS -->
     <link rel="stylesheet" href="style.css">
 
-    <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-    import { getDatabase } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
-
-    const firebaseConfig = {
-        apiKey: "AIzaSyA4jUz_wgtt1IO04poSZjJcfBsstM0eh3U",
-        authDomain: "chagashilgers.firebaseapp.com",
-        projectId: "chagashilgers",
-        storageBucket: "chagashilgers.firebasestorage.app",
-        messagingSenderId: "962851462458",
-        appId: "1:962851462458:web:5cdfda63c394c4079f0403",
-        measurementId: "G-JYMPNY0Q45"
-    };
-
-    const app = initializeApp(firebaseConfig);
-
-    const database = getDatabase(app);
-
-    window.firebaseDatabase = database;
-</script>
 </head>
 
 <body>
@@ -516,7 +501,7 @@
     </div>
 
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 
 </body>
 </html>
