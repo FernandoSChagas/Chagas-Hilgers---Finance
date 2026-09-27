@@ -1,13 +1,74 @@
 /* =========================================================
    BANCO CHAGAS&HILGERS
-   MOTOR DA SIMULAÇÃO — VERSÃO OFICIAL
+   MOTOR DA SIMULAÇÃO — VERSÃO COMPARTILHADA
+   Firebase Realtime Database
+========================================================= */
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+
+import {
+    getDatabase,
+    ref,
+    set,
+    onValue
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
+
+
+/* =========================================================
+   CONFIGURAÇÃO DO FINANCIAMENTO
 ========================================================= */
 
 const INITIAL_TARGET = 300000;
 const MONTHLY_PAYMENT = 1200;
 const BASE_TERM = 360;
 const FIRST_PAYMENT_DATE = "2027-01-05";
+
 const STORAGE_KEY = "chagas_hilgers_simulation_v2";
+
+
+/* =========================================================
+   CONFIGURAÇÃO FIREBASE
+========================================================= */
+
+const firebaseConfig = {
+
+    apiKey: "AIzaSyA4jUz_wgtt1IO04poSZjJcfBsstM0eh3U",
+
+    authDomain: "chagashilgers.firebaseapp.com",
+
+    projectId: "chagashilgers",
+
+    storageBucket: "chagashilgers.firebasestorage.app",
+
+    messagingSenderId: "962851462458",
+
+    appId: "1:962851462458:web:5cdfda63c394c4079f0403",
+
+    measurementId: "G-JYMPNY0Q45",
+
+    databaseURL:
+        "https://chagashilgers-default-rtdb.firebaseio.com"
+
+};
+
+
+/* =========================================================
+   INICIALIZAR FIREBASE
+========================================================= */
+
+const app =
+    initializeApp(firebaseConfig);
+
+
+const database =
+    getDatabase(app);
+
+
+const simulationRef =
+    ref(database, "simulation");
+
+
+let firebaseLoaded = false;
 
 
 /* =========================================================
@@ -15,55 +76,124 @@ const STORAGE_KEY = "chagas_hilgers_simulation_v2";
 ========================================================= */
 
 function createInitialState() {
+
     return {
+
         capital: 0,
+
         paidInstallments: 0,
+
         nextInstallmentNumber: 1,
-        nextPaymentDate: FIRST_PAYMENT_DATE,
+
+        nextPaymentDate:
+            FIRST_PAYMENT_DATE,
+
         anticipatedMonths: 0,
+
         transactions: []
+
     };
+
 }
 
 
 /* =========================================================
-   CARREGAR / SALVAR
+   ESTADO LOCAL — MIGRAÇÃO INICIAL
 ========================================================= */
 
-function loadState() {
+function loadLocalState() {
 
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved =
+        localStorage.getItem(
+            STORAGE_KEY
+        );
+
 
     if (!saved) {
-        return createInitialState();
+
+        return null;
+
     }
+
 
     try {
 
-        const parsed = JSON.parse(saved);
+        const parsed =
+            JSON.parse(saved);
+
 
         return {
+
             ...createInitialState(),
+
             ...parsed
+
         };
 
     } catch (error) {
 
-        console.error("Erro ao carregar simulação:", error);
+        console.error(
+            "Erro ao carregar dados locais:",
+            error
+        );
 
-        return createInitialState();
+        return null;
+
     }
+
 }
 
 
-let state = loadState();
+/* =========================================================
+   ESTADO ATUAL
+========================================================= */
+
+let state =
+    createInitialState();
 
 
-function saveState() {
-    localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(state)
-    );
+/* =========================================================
+   SALVAR NO FIREBASE
+========================================================= */
+
+async function saveState() {
+
+    if (!firebaseLoaded) {
+
+        console.warn(
+            "Firebase ainda não foi carregado."
+        );
+
+        return;
+
+    }
+
+
+    try {
+
+        await set(
+            simulationRef,
+            state
+        );
+
+
+        console.log(
+            "Simulação salva no Firebase."
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Erro ao salvar no Firebase:",
+            error
+        );
+
+        alert(
+            "Não foi possível salvar a movimentação. Verifique a conexão."
+        );
+
+    }
+
 }
 
 
@@ -73,26 +203,34 @@ function saveState() {
 
 function money(value) {
 
-    return new Intl.NumberFormat("pt-BR", {
-        style: "currency",
-        currency: "BRL"
-    }).format(value);
+    return new Intl.NumberFormat(
+        "pt-BR",
+        {
+            style: "currency",
+            currency: "BRL"
+        }
+    ).format(value);
 
 }
 
 
 function number(value) {
 
-    return new Intl.NumberFormat("pt-BR", {
-        maximumFractionDigits: 1
-    }).format(value);
+    return new Intl.NumberFormat(
+        "pt-BR",
+        {
+            maximumFractionDigits: 1
+        }
+    ).format(value);
 
 }
 
 
 function formatDate(dateString) {
 
-    const parts = dateString.split("-");
+    const parts =
+        dateString.split("-");
+
 
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
 
@@ -105,36 +243,67 @@ function formatDate(dateString) {
 
 function getToday() {
 
-    const date = new Date();
+    const date =
+        new Date();
+
 
     return [
+
         date.getFullYear(),
-        String(date.getMonth() + 1).padStart(2, "0"),
-        String(date.getDate()).padStart(2, "0")
+
+        String(
+            date.getMonth() + 1
+        ).padStart(2, "0"),
+
+        String(
+            date.getDate()
+        ).padStart(2, "0")
+
     ].join("-");
 
 }
 
 
-function addMonths(dateString, months) {
+function addMonths(
+    dateString,
+    months
+) {
 
-    const [year, month, day] =
-        dateString.split("-").map(Number);
-
-    const date = new Date(
+    const [
         year,
-        month - 1,
+        month,
         day
-    );
+    ] =
+        dateString
+            .split("-")
+            .map(Number);
+
+
+    const date =
+        new Date(
+            year,
+            month - 1,
+            day
+        );
+
 
     date.setMonth(
         date.getMonth() + months
     );
 
+
     return [
+
         date.getFullYear(),
-        String(date.getMonth() + 1).padStart(2, "0"),
-        String(date.getDate()).padStart(2, "0")
+
+        String(
+            date.getMonth() + 1
+        ).padStart(2, "0"),
+
+        String(
+            date.getDate()
+        ).padStart(2, "0")
+
     ].join("-");
 
 }
@@ -146,7 +315,9 @@ function addMonths(dateString, months) {
 
 function getTotalCapital() {
 
-    return state.capital;
+    return Number(
+        state.capital || 0
+    );
 
 }
 
@@ -154,17 +325,30 @@ function getTotalCapital() {
 function calculateExtraMonths() {
 
     return state.transactions
+
         .filter(
             transaction =>
-                transaction.type === "Aporte extraordinário"
+                transaction.type ===
+                "Aporte extraordinário"
         )
+
         .reduce(
-            (total, transaction) =>
-                total + (
-                    transaction.value /
+
+            (
+                total,
+                transaction
+            ) =>
+
+                total +
+                (
+                    Number(
+                        transaction.value
+                    ) /
                     MONTHLY_PAYMENT
                 ),
+
             0
+
         );
 
 }
@@ -173,9 +357,21 @@ function calculateExtraMonths() {
 function calculateRemainingTerm() {
 
     const savedMonths =
-        state.paidInstallments +
-        calculateExtraMonths() +
-        state.anticipatedMonths;
+
+        Number(
+            state.paidInstallments || 0
+        )
+
+        +
+
+        calculateExtraMonths()
+
+        +
+
+        Number(
+            state.anticipatedMonths || 0
+        );
+
 
     return Math.max(
         0,
@@ -189,29 +385,47 @@ function calculateRemainingTerm() {
    PRESTAÇÃO MENSAL
 ========================================================= */
 
-function registerMonthlyPayment() {
+async function registerMonthlyPayment() {
+
+    if (!firebaseLoaded) {
+
+        alert(
+            "A simulação ainda está carregando. Aguarde alguns segundos."
+        );
+
+        return;
+
+    }
+
 
     const paymentDate =
         state.nextPaymentDate;
+
 
     const installmentNumber =
         state.nextInstallmentNumber;
 
 
-    state.capital += MONTHLY_PAYMENT;
+    state.capital +=
+        MONTHLY_PAYMENT;
+
 
     state.paidInstallments++;
+
 
     state.nextInstallmentNumber++;
 
 
     state.transactions.unshift({
 
-        type: "Prestação mensal",
+        type:
+            "Prestação mensal",
 
-        value: MONTHLY_PAYMENT,
+        value:
+            MONTHLY_PAYMENT,
 
-        date: paymentDate,
+        date:
+            paymentDate,
 
         description:
             `Parcela ${installmentNumber}`
@@ -226,9 +440,10 @@ function registerMonthlyPayment() {
         );
 
 
-    saveState();
-
     updateDashboard();
+
+
+    await saveState();
 
 }
 
@@ -237,15 +452,29 @@ function registerMonthlyPayment() {
    APORTE EXTRAORDINÁRIO
 ========================================================= */
 
-function registerExtraContribution() {
+async function registerExtraContribution() {
+
+    if (!firebaseLoaded) {
+
+        alert(
+            "A simulação ainda está carregando. Aguarde alguns segundos."
+        );
+
+        return;
+
+    }
+
 
     const input =
         document.getElementById(
             "extraAmount"
         );
 
+
     const amount =
-        Number(input.value);
+        Number(
+            input.value
+        );
 
 
     if (
@@ -258,19 +487,24 @@ function registerExtraContribution() {
         );
 
         return;
+
     }
 
 
-    state.capital += amount;
+    state.capital +=
+        amount;
 
 
     state.transactions.unshift({
 
-        type: "Aporte extraordinário",
+        type:
+            "Aporte extraordinário",
 
-        value: amount,
+        value:
+            amount,
 
-        date: getToday(),
+        date:
+            getToday(),
 
         description:
             "Aporte adicional"
@@ -281,9 +515,10 @@ function registerExtraContribution() {
     input.value = "";
 
 
-    saveState();
-
     updateDashboard();
+
+
+    await saveState();
 
 }
 
@@ -292,15 +527,29 @@ function registerExtraContribution() {
    ANTECIPAÇÃO DE PARCELAS
 ========================================================= */
 
-function anticipateInstallments() {
+async function anticipateInstallments() {
+
+    if (!firebaseLoaded) {
+
+        alert(
+            "A simulação ainda está carregando. Aguarde alguns segundos."
+        );
+
+        return;
+
+    }
+
 
     const input =
         document.getElementById(
             "anticipationAmount"
         );
 
+
     const quantity =
-        Number(input.value);
+        Number(
+            input.value
+        );
 
 
     if (
@@ -313,6 +562,7 @@ function anticipateInstallments() {
         );
 
         return;
+
     }
 
 
@@ -335,9 +585,12 @@ function anticipateInstallments() {
         1;
 
 
-    state.capital += total;
+    state.capital +=
+        total;
 
-    state.anticipatedMonths += quantity;
+
+    state.anticipatedMonths +=
+        quantity;
 
 
     state.nextPaymentDate =
@@ -371,9 +624,10 @@ function anticipateInstallments() {
     input.value = "";
 
 
-    saveState();
-
     updateDashboard();
+
+
+    await saveState();
 
 }
 
@@ -389,11 +643,16 @@ function openResetModal() {
             "resetModal"
         );
 
+
     if (modal) {
 
-        modal.classList.add("active");
+        modal.classList.add(
+            "active"
+        );
 
-        modal.classList.remove("hidden");
+        modal.classList.remove(
+            "hidden"
+        );
 
     }
 
@@ -407,31 +666,42 @@ function closeResetModal() {
             "resetModal"
         );
 
+
     if (modal) {
 
-        modal.classList.remove("active");
+        modal.classList.remove(
+            "active"
+        );
 
-        modal.classList.add("hidden");
+        modal.classList.add(
+            "hidden"
+        );
 
     }
 
 }
 
 
-function confirmReset() {
+async function confirmReset() {
+
+    if (!firebaseLoaded) {
+
+        return;
+
+    }
+
 
     state =
         createInitialState();
 
 
-    localStorage.removeItem(
-        STORAGE_KEY
-    );
-
-
     closeResetModal();
 
+
     updateDashboard();
+
+
+    await saveState();
 
 }
 
@@ -476,45 +746,76 @@ function renderTransactions() {
         `;
 
         return;
+
     }
 
 
     list.innerHTML =
         state.transactions
-            .map(transaction => `
+            .map(
+                transaction => `
 
                 <div class="transaction">
 
                     <div class="transaction-icon">
-                        ${transaction.type === "Prestação mensal"
-                            ? "✓"
-                            : transaction.type === "Aporte extraordinário"
+
+                        ${
+                            transaction.type ===
+                            "Prestação mensal"
+
+                                ? "✓"
+
+                                :
+
+                            transaction.type ===
+                            "Aporte extraordinário"
+
                                 ? "+"
-                                : "↗"}
+
+                                : "↗"
+                        }
+
                     </div>
+
 
                     <div class="transaction-info">
 
                         <div class="transaction-type">
+
                             ${transaction.type}
+
                         </div>
 
+
                         <div class="transaction-date">
-                            ${formatDate(transaction.date)}
-                            ${transaction.description
-                                ? ` · ${transaction.description}`
-                                : ""}
+
+                            ${formatDate(
+                                transaction.date
+                            )}
+
+                            ${
+                                transaction.description
+                                    ? ` · ${transaction.description}`
+                                    : ""
+                            }
+
                         </div>
 
                     </div>
 
+
                     <div class="transaction-amount">
-                        + ${money(transaction.value)}
+
+                        + ${money(
+                            transaction.value
+                        )}
+
                     </div>
 
                 </div>
 
-            `)
+            `
+            )
             .join("");
 
 }
@@ -540,7 +841,10 @@ function updateDashboard() {
     const progress =
         Math.min(
             100,
-            (total / INITIAL_TARGET) * 100
+            (
+                total /
+                INITIAL_TARGET
+            ) * 100
         );
 
 
@@ -551,10 +855,13 @@ function updateDashboard() {
             "financedAmount"
         );
 
+
     if (financedAmount) {
 
         financedAmount.textContent =
-            money(INITIAL_TARGET);
+            money(
+                INITIAL_TARGET
+            );
 
     }
 
@@ -565,6 +872,7 @@ function updateDashboard() {
         document.getElementById(
             "paidAmount"
         );
+
 
     if (paidAmount) {
 
@@ -581,6 +889,7 @@ function updateDashboard() {
             "remainingAmount"
         );
 
+
     if (remainingAmount) {
 
         remainingAmount.textContent =
@@ -596,6 +905,7 @@ function updateDashboard() {
             "progressPercent"
         );
 
+
     if (progressPercent) {
 
         progressPercent.textContent =
@@ -608,6 +918,7 @@ function updateDashboard() {
         document.getElementById(
             "progressFill"
         );
+
 
     if (progressFill) {
 
@@ -623,6 +934,7 @@ function updateDashboard() {
         document.getElementById(
             "remainingTerm"
         );
+
 
     if (remainingTerm) {
 
@@ -641,6 +953,7 @@ function updateDashboard() {
             "anticipatedMonths"
         );
 
+
     if (anticipatedMonths) {
 
         anticipatedMonths.textContent =
@@ -658,6 +971,7 @@ function updateDashboard() {
             "paidInstallments"
         );
 
+
     if (paidInstallments) {
 
         paidInstallments.textContent =
@@ -672,6 +986,7 @@ function updateDashboard() {
         document.getElementById(
             "nextInstallment"
         );
+
 
     if (nextInstallment) {
 
@@ -690,10 +1005,13 @@ function updateDashboard() {
             "summaryFinanced"
         );
 
+
     if (summaryFinanced) {
 
         summaryFinanced.textContent =
-            money(INITIAL_TARGET);
+            money(
+                INITIAL_TARGET
+            );
 
     }
 
@@ -702,6 +1020,7 @@ function updateDashboard() {
         document.getElementById(
             "summaryPaid"
         );
+
 
     if (summaryPaid) {
 
@@ -715,6 +1034,7 @@ function updateDashboard() {
         document.getElementById(
             "summaryRemaining"
         );
+
 
     if (summaryRemaining) {
 
@@ -732,14 +1052,141 @@ function updateDashboard() {
 
 
 /* =========================================================
-   INICIALIZAÇÃO
+   DISPONIBILIZAR FUNÇÕES PARA O HTML
 ========================================================= */
 
-document.addEventListener(
-    "DOMContentLoaded",
-    function () {
+window.registerMonthlyPayment =
+    registerMonthlyPayment;
 
-        updateDashboard();
+window.registerExtraContribution =
+    registerExtraContribution;
+
+window.anticipateInstallments =
+    anticipateInstallments;
+
+window.openResetModal =
+    openResetModal;
+
+window.closeResetModal =
+    closeResetModal;
+
+window.confirmReset =
+    confirmReset;
+
+
+/* =========================================================
+   CONEXÃO COM FIREBASE
+========================================================= */
+
+onValue(
+    simulationRef,
+    async (snapshot) => {
+
+        try {
+
+            if (snapshot.exists()) {
+
+                /*
+                 * Já existe uma simulação no Firebase.
+                 * Ela passa a ser a fonte oficial dos dados.
+                 */
+
+                const firebaseState =
+                    snapshot.val();
+
+
+                state = {
+
+                    ...createInitialState(),
+
+                    ...firebaseState,
+
+                    transactions:
+                        Array.isArray(
+                            firebaseState.transactions
+                        )
+                            ? firebaseState.transactions
+                            : []
+
+                };
+
+
+                firebaseLoaded = true;
+
+
+                updateDashboard();
+
+
+                console.log(
+                    "Simulação carregada do Firebase."
+                );
+
+
+                return;
+
+            }
+
+
+            /*
+             * O Firebase ainda está vazio.
+             *
+             * Vamos verificar se este navegador
+             * possui a simulação antiga no localStorage.
+             *
+             * Isso permite migrar os dados existentes
+             * para o Firebase na primeira utilização.
+             */
+
+            const localState =
+                loadLocalState();
+
+
+            if (localState) {
+
+                state =
+                    localState;
+
+            } else {
+
+                state =
+                    createInitialState();
+
+            }
+
+
+            firebaseLoaded = true;
+
+
+            updateDashboard();
+
+
+            await set(
+                simulationRef,
+                state
+            );
+
+
+            console.log(
+                "Simulação inicial criada no Firebase."
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "Erro ao sincronizar com Firebase:",
+                error
+            );
+
+
+            firebaseLoaded = false;
+
+
+            alert(
+                "Não foi possível conectar à simulação compartilhada."
+            );
+
+        }
 
     }
 );
